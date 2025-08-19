@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <title>कृषि बिल जनरेटर</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h2, h3 { text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    table, th, td { border: 1px solid black; }
+    th, td { padding: 8px; text-align: center; }
+    .note { margin-top: 20px; font-weight: bold; color: red; text-align: center; }
+    .btn-box { margin-top: 20px; text-align: center; }
+    button { margin: 5px; padding: 8px 15px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <h2>🚜 कृषि बिल जनरेटर</h2>
+
+  <h3>Owner (मालिक) की जानकारी</h3>
+  <p>नाम: <input type="text" id="ownerName" oninput="saveData()"></p>
+  <p>पता: <input type="text" id="ownerAddress" oninput="saveData()"></p>
+  <p>मोबाइल: <input type="text" id="ownerMobile" oninput="saveData()"></p>
+
+  <h3>ग्राहक की जानकारी</h3>
+  <p>नाम: <input type="text" id="custName" oninput="saveData()"></p>
+  <p>पता: <input type="text" id="custAddress" oninput="saveData()"></p>
+  <p>मोबाइल: <input type="text" id="custMobile" oninput="saveData()"></p>
+  <p>बिल संख्या: <input type="text" id="billNo" oninput="saveData()"></p>
+
+  <h3>कार्य विवरण</h3>
+  <table id="billTable">
+    <tr>
+      <th>क्रमांक</th>
+      <th>खेती का प्रकार</th>
+      <th>दिनांक</th>
+      <th>घंटे</th>
+      <th>मिनट</th>
+      <th>किलोमीटर</th>
+      <th>दर (₹)</th>
+      <th>कुल (₹)</th>
+      <th>हटाएं</th>
+    </tr>
+  </table>
+  <button onclick="addRow()">+ कार्य जोड़ें</button>
+
+  <p>छूट (₹): <input type="number" id="discount" value="0" oninput="calculateTotal(); saveData();"></p>
+  <p>अन्य शुल्क (₹): <input type="number" id="shipping" value="0" oninput="calculateTotal(); saveData();"></p>
+  <p>पुराना बकाया (₹): <input type="number" id="due" value="0" oninput="calculateTotal(); saveData();"></p>
+
+  <h3>कुल योग: ₹ <span id="grandTotal">0</span></h3>
+  <p>शब्दों में: <span id="amountWords"></span></p>
+
+  <div class="note">👉 कृपया जल्द से जल्द भुगतान करें</div>
+
+  <div class="btn-box">
+    <button onclick="window.print()">🖨 प्रिंट / PDF सेव करें</button>
+    <button onclick="clearData()">🗑 डेटा साफ़ करें</button>
+  </div>
+
+<script>
+function addRow(data = {}) {
+  let table = document.getElementById("billTable");
+  let row = table.insertRow(-1);
+
+  row.innerHTML = `
+    <td class="serial"></td>
+    <td>
+      <select onchange="toggleInputs(this); saveData(); calculateTotal();">
+        <option ${data.type==="कल्टीवेटर"?"selected":""}>कल्टीवेटर</option>
+        <option ${data.type==="थ्रेशर"?"selected":""}>थ्रेशर</option>
+        <option ${data.type==="कान"?"selected":""}>कान</option>
+        <option ${data.type==="लेबलर"?"selected":""}>लेबलर</option>
+        <option ${data.type==="रोटावेटर"?"selected":""}>रोटावेटर</option>
+        <option ${data.type==="हैरो"?"selected":""}>हैरो</option>
+        <option ${data.type==="ट्रॉली"?"selected":""}>ट्रॉली</option>
+      </select>
+    </td>
+    <td><input type="date" value="${data.date||""}" onchange="saveData()"></td>
+    <td><input type="number" value="${data.hrs||0}" min="0" oninput="calculateTotal(); saveData();"></td>
+    <td><input type="number" value="${data.mins||0}" min="0" max="59" oninput="calculateTotal(); saveData();"></td>
+    <td><input type="number" value="${data.km||0}" min="0" oninput="calculateTotal(); saveData();"></td>
+    <td><input type="number" value="${data.rate||0}" min="0" oninput="calculateTotal(); saveData();"></td>
+    <td class="total">0</td>
+    <td><button onclick="this.parentElement.parentElement.remove(); updateSerials(); calculateTotal(); saveData();">❌</button></td>
+  `;
+  updateSerials();
+  toggleInputs(row.cells[1].children[0]);
+  calculateTotal();
+}
+
+function updateSerials() {
+  let table = document.getElementById("billTable");
+  for (let i = 1; i < table.rows.length; i++) {
+    table.rows[i].cells[0].innerText = i;
+  }
+}
+
+function toggleInputs(select) {
+  let row = select.parentElement.parentElement;
+  let hrsInput = row.cells[3].children[0];
+  let minsInput = row.cells[4].children[0];
+  let kmInput = row.cells[5].children[0];
+
+  if (select.value === "ट्रॉली") {
+    hrsInput.disabled = true;
+    minsInput.disabled = true;
+    kmInput.disabled = false;
+    hrsInput.value = 0;
+    minsInput.value = 0;
+  } else {
+    hrsInput.disabled = false;
+    minsInput.disabled = false;
+    kmInput.disabled = true;
+    kmInput.value = 0;
+  }
+}
+
+function calculateTotal() {
+  let table = document.getElementById("billTable");
+  let total = 0;
+
+  for (let i = 1; i < table.rows.length; i++) {
+    let type = table.rows[i].cells[1].children[0].value;
+    let hrs = parseFloat(table.rows[i].cells[3].children[0].value) || 0;
+    let mins = parseFloat(table.rows[i].cells[4].children[0].value) || 0;
+    let km = parseFloat(table.rows[i].cells[5].children[0].value) || 0;
+    let rate = parseFloat(table.rows[i].cells[6].children[0].value) || 0;
+
+    let rowTotal = 0;
+    if (type === "ट्रॉली") {
+      rowTotal = km * rate;
+    } else {
+      rowTotal = (hrs + (mins / 60)) * rate;
+    }
+
+    table.rows[i].cells[7].innerText = rowTotal.toFixed(2);
+    total += rowTotal;
+  }
+
+  let discount = parseFloat(document.getElementById("discount").value) || 0;
+  let shipping = parseFloat(document.getElementById("shipping").value) || 0;
+  let due = parseFloat(document.getElementById("due").value) || 0;
+
+  total = total - discount + shipping + due;
+  document.getElementById("grandTotal").innerText = total.toFixed(2);
+  document.getElementById("amountWords").innerText = numberToWords(Math.round(total)) + " रुपये मात्र";
+}
+
+function numberToWords(num) {
+  const a = ["","एक","दो","तीन","चार","पाँच","छह","सात","आठ","नौ","दस","ग्यारह","बारह","तेरह","चौदह","पंद्रह","सोलह","सत्रह","अठारह","उन्नीस"];
+  const b = ["","","बीस","तीस","चालीस","पचास","साठ","सत्तर","अस्सी","नब्बे"];
+  if (num === 0) return "शून्य";
+  if (num < 20) return a[num];
+  if (num < 100) return b[Math.floor(num/10)] + (num%10 ? " " + a[num%10] : "");
+  if (num < 1000) return a[Math.floor(num/100)] + " सौ " + numberToWords(num%100);
+  if (num < 100000) return numberToWords(Math.floor(num/1000)) + " हज़ार " + numberToWords(num%1000);
+  if (num < 10000000) return numberToWords(Math.floor(num/100000)) + " लाख " + numberToWords(num%100000);
+  return "बहुत बड़ी राशि";
+}
+
+// -------- AUTO SAVE FEATURE --------
+function saveData() {
+  let data = {
+    ownerName: document.getElementById("ownerName").value,
+    ownerAddress: document.getElementById("ownerAddress").value,
+    ownerMobile: document.getElementById("ownerMobile").value,
+    custName: document.getElementById("custName").value,
+    custAddress: document.getElementById("custAddress").value,
+    custMobile: document.getElementById("custMobile").value,
+    billNo: document.getElementById("billNo").value,
+    discount: document.getElementById("discount").value,
+    shipping: document.getElementById("shipping").value,
+    due: document.getElementById("due").value,
+    rows: []
+  };
+
+  let table = document.getElementById("billTable");
+  for (let i = 1; i < table.rows.length; i++) {
+    data.rows.push({
+      type: table.rows[i].cells[1].children[0].value,
+      date: table.rows[i].cells[2].children[0].value,
+      hrs: table.rows[i].cells[3].children[0].value,
+      mins: table.rows[i].cells[4].children[0].value,
+      km: table.rows[i].cells[5].children[0].value,
+      rate: table.rows[i].cells[6].children[0].value,
+    });
+  }
+  localStorage.setItem("billData", JSON.stringify(data));
+}
+
+function loadData() {
+  let saved = localStorage.getItem("billData");
+  if (!saved) return;
+  let data = JSON.parse(saved);
+
+  document.getElementById("ownerName").value = data.ownerName || "";
+  document.getElementById("ownerAddress").value = data.ownerAddress || "";
+  document.getElementById("ownerMobile").value = data.ownerMobile || "";
+  document.getElementById("custName").value = data.custName || "";
+  document.getElementById("custAddress").value = data.custAddress || "";
+  document.getElementById("custMobile").value = data.custMobile || "";
+  document.getElementById("billNo").value = data.billNo || "";
+  document.getElementById("discount").value = data.discount || 0;
+  document.getElementById("shipping").value = data.shipping || 0;
+  document.getElementById("due").value = data.due || 0;
+
+  if (data.rows) {
+    for (let row of data.rows) {
+      addRow(row);
+    }
+  }
+  updateSerials();
+  calculateTotal();
+}
+
+function clearData() {
+  if (confirm("क्या आप सारा डेटा मिटाना चाहते हैं?")) {
+    localStorage.removeItem("billData");
+    location.reload();
+  }
+}
+
+window.onload = loadData;
+</script>
+
+</body>
+</html>
